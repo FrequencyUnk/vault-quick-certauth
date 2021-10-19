@@ -16,13 +16,16 @@ vault write -field=certificate pki/root/generate/internal \
      common_name="example.com" \
      ttl=87600h > CA_cert.crt
 #Configure URLs for the CA and CRL
+vault write pki/config/urls \
+     issuing_certificates="$VAULT_ADDR/v1/pki/ca" \
+     crl_distribution_points="$VAULT_ADDR/v1/pki/crl"
 
 ####Generate an intermediate CA
 #Enable PKI Secrets Engine at new path (pki_int)
 vault secrets enable -path=pki_int pki
 #Set the pki_int Secrets Engine to issue certificates with a max TTL
 vault secrets tune -max-lease-ttl=43800h pki_int
-#generate an intermediate and save the CSR as pki_intermediate.csr
+#generate an intermediate CA and save the CSR as pki_intermediate.csr
 vault write -format=json pki_int/intermediate/generate/internal \
      common_name="example.com Intermediate Authority" \
      | jq -r '.data.csr' > pki_intermediate.csr
