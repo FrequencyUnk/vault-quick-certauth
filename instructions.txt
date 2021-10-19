@@ -51,6 +51,7 @@ vault write pki_int/issue/example-dot-com common_name="test.example.com" ttl="24
 ########End Demo#######
 ###Revoke Certificates
 #revoke a certificate, execute the following command
+vault write pki_int/revoke serial_number=<serial_number>
 
 ###Remove expired Certificates from storage backend
 #Remove revoked certificate and clean the CRL
