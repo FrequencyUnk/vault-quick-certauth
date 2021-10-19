@@ -1,0 +1,70 @@
+###Start Vault
+#Start Vault in Dev Mode
+vault server -dev
+#export vault addr
+export VAULT_ADDR='http://127.0.0.1:8200'
+#export vault token
+export VAULT_TOKEN=<token>
+
+###Generate root CA
+#Enable the PKI Secrets Engine
+vault secrets enable pki
+#Set the PKI Engine to issue certificates w/ a max TTL (EX 87600 hours)
+vault secrets tune -max-lease-ttl=87600h pki
+#Generate root cert and save as CA_cert.crt
+vault write -field=certificate pki/root/generate/internal \
+     common_name="example.com" \
+     ttl=87600h > CA_cert.crt
+#Configure URLs for the CA and CRL
+
+####Generate an intermediate CA
+#Enable PKI Secrets Engine at new path (pki_int)
+vault secrets enable -path=pki_int pki
+#Set the pki_int Secrets Engine to issue certificates with a max TTL
+vault secrets tune -max-lease-ttl=43800h pki_int
+#generate an intermediate and save the CSR as pki_intermediate.csr
+vault write -format=json pki_int/intermediate/generate/internal \
+     common_name="example.com Intermediate Authority" \
+     | jq -r '.data.csr' > pki_intermediate.csr
+#Sign the intermediate certificate with the root CA private key, and save the generated certificate as intermediate.cert.pem
+vault write -format=json pki/root/sign-intermediate csr=@pki_intermediate.csr \
+     format=pem_bundle ttl="43800h" \
+     | jq -r '.data.certificate' > intermediate.cert.pem
+#Once the CSR is signed and the root CA returns a certificate, it can be imported back into Vault
+vault write pki_int/intermediate/set-signed certificate=@intermediate.cert.pem
+
+###Create a role
+#Create a role named example-dot-com
+vault write pki_int/roles/example-dot-com \
+     allowed_domains="example.com" \
+     allow_subdomains=true \
+     max_ttl="720h"
+
+###Request Certificates
+#request a new certificate for the test.example.com domain based on the example-dot-com role
+vault write pki_int/issue/example-dot-com common_name="test.example.com" ttl="24h"
+#Copy the output of the serial_number associated with the certificate (shows at end of output)
+
+########End Demo#######
+###Revoke Certificates
+#revoke a certificate, execute the following command
+
+###Remove expired Certificates from storage backend
+#Remove revoked certificate and clean the CRL
+vault write pki_int/tidy tidy_cert_store=true tidy_revoked_certs=true
+
+###Clean up
+#Unset environment variables
+unset VAULT_ADDR VAULT_TOKEN
+
+#Remove the files
+rm -f \
+    CA_cert.crt \
+    intermediate.cert.pem \
+    pki_intermediate.csr \
+    payload.json \
+    payload-url.json \
+    payload-int.json \
+    payload-int-cert.json \
+    payload-signed.json \
+    payload-role.json
